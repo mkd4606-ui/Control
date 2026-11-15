@@ -1,0 +1,130 @@
+name: Build All (APK + EXE + Linux DEB)
+
+# Repo ke root mein yeh layout hona chahiye (zip ke andar ka "universal_device_agent" folder
+# ka CONTENT repo root par daalo):
+#   shared_app/  scripts/  installers/  .github/workflows/build-all.yml
+#
+# Kaise chalayein:
+#   1) GitHub -> Actions tab -> "Build All" -> Run workflow   (manual)
+#   2) Har push par automatic
+#   3) Release banane ke liye:  git tag v0.1.0 && git push origin v0.1.0
+#
+# Optional: Settings -> Secrets and variables -> Actions -> Variables mein
+#   CONTROL_API_URL = https://your-backend-url   (na ho to http://localhost:8080)
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: write   # tag par Release banane ke liye
+
+env:
+  CONTROL_API_URL: ${{ vars.CONTROL_API_URL || 'http://localhost:8080' }}
+
+jobs:
+  # ------------------------------------------------------------------ ANDROID APK
+  apk:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: shared_app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      # ZIP mein gradlew/.metadata nahi hote; flutter create sirf missing files banata hai.
+      - run: flutter create --platforms=android --org com.deviceagent --project-name shared_app .
+      - name: Duplicate .kts / stray files hatao (repo Groovy DSL use karta hai)
+        run: |
+          for f in settings.gradle build.gradle app/build.gradle; do rm -f "android/$f.kts"; done
+          rm -rf android/app/src/main/kotlin/com/example
+      - run: flutter pub get
+      - run: flutter build apk --release --dart-define=CONTROL_API_URL=${{ env.CONTROL_API_URL }}
+      - run: cp build/app/outputs/flutter-apk/app-release.apk ../UniversalDeviceAgent.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: UniversalDeviceAgent.apk
+
+  # ------------------------------------------------------------------ WINDOWS EXE
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: shared_app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter create --platforms=windows --org com.deviceagent --project-name shared_app .
+      - run: flutter pub get
+      - run: flutter build windows --release --dart-define=CONTROL_API_URL=${{ env.CONTROL_API_URL }}
+      - name: Installer (.exe) banao - Inno Setup
+        working-directory: .
+        shell: pwsh
+        run: |
+          Invoke-WebRequest "https://aka.ms/vs/17/release/vc_redist.x64.exe" -OutFile installers\windows\vc_redist.x64.exe
+          choco install innosetup -y --no-progress
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" installers\windows\universal_device_agent.iss
+      - name: Portable ZIP (bina install ke chalne wala)
+        working-directory: .
+        shell: pwsh
+        run: Compress-Archive -Path shared_app\build\windows\x64\runner\Release\* -DestinationPath installers\windows\Output\UniversalDeviceAgent-Windows-Portable.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-exe
+          path: |
+            installers/windows/Output/*.exe
+            installers/windows/Output/*.zip
+
+  # ------------------------------------------------------------------ LINUX (OS) DEB
+  linux:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: shared_app
+    steps:
+      - uses: actions/checkout@v4
+      - name: Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config \
+            libgtk-3-dev libglib2.0-dev libpipewire-0.3-dev \
+            libx11-dev libxtst-dev libturbojpeg0-dev libebook1.2-dev dpkg
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter create --platforms=linux --org com.deviceagent --project-name shared_app .
+      - run: flutter pub get
+      - run: flutter build linux --release --dart-define=CONTROL_API_URL=${{ env.CONTROL_API_URL }}
+      - name: .deb package banao
+        working-directory: .
+        run: |
+          chmod +x scripts/package_linux_deb.sh
+          scripts/package_linux_deb.sh "0.1.0"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-deb
+          path: dist/*.deb
+
+  # ------------------------------------------------------------------ GITHUB RELEASE
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [apk, windows, linux]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**/*
