@@ -16,11 +16,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Project folder dhoondo
+      - name: Zip extract karo aur project folder dhoondo
         shell: bash
         run: |
+          PY=$(command -v python3 || command -v python)
+          find . -maxdepth 1 -name '*.zip' | while read -r z; do
+            echo "Extracting $z"
+            "$PY" -m zipfile -e "$z" ./extracted
+          done
           P=$(find . -type f -path '*/shared_app/pubspec.yaml' -not -path './.git/*' | awk '{print length($0) " " $0}' | sort -n | head -1 | cut -d' ' -f2-)
-          if [ -z "$P" ]; then echo "shared_app/pubspec.yaml repo mein nahi mili. Repo ki files:"; find . -maxdepth 3 -not -path './.git/*' | head -50; exit 1; fi
+          if [ -z "$P" ]; then echo "shared_app/pubspec.yaml nahi mili. Files:"; find . -maxdepth 3 -not -path './.git/*' | head -50; exit 1; fi
           ROOT=$(dirname "$(dirname "$P")")
           echo "Project root: $ROOT"
           echo "ROOT=$ROOT" >> "$GITHUB_ENV"
@@ -56,11 +61,16 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Project folder dhoondo
+      - name: Zip extract karo aur project folder dhoondo
         shell: bash
         run: |
+          PY=$(command -v python3 || command -v python)
+          find . -maxdepth 1 -name '*.zip' | while read -r z; do
+            echo "Extracting $z"
+            "$PY" -m zipfile -e "$z" ./extracted
+          done
           P=$(find . -type f -path '*/shared_app/pubspec.yaml' -not -path './.git/*' | awk '{print length($0) " " $0}' | sort -n | head -1 | cut -d' ' -f2-)
-          if [ -z "$P" ]; then echo "shared_app/pubspec.yaml repo mein nahi mili."; exit 1; fi
+          if [ -z "$P" ]; then echo "shared_app/pubspec.yaml nahi mili."; exit 1; fi
           ROOT=$(dirname "$(dirname "$P")")
           echo "Project root: $ROOT"
           echo "ROOT=$ROOT" >> "$GITHUB_ENV"
@@ -97,11 +107,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Project folder dhoondo
+      - name: Zip extract karo aur project folder dhoondo
         shell: bash
         run: |
+          PY=$(command -v python3 || command -v python)
+          find . -maxdepth 1 -name '*.zip' | while read -r z; do
+            echo "Extracting $z"
+            "$PY" -m zipfile -e "$z" ./extracted
+          done
           P=$(find . -type f -path '*/shared_app/pubspec.yaml' -not -path './.git/*' | awk '{print length($0) " " $0}' | sort -n | head -1 | cut -d' ' -f2-)
-          if [ -z "$P" ]; then echo "shared_app/pubspec.yaml repo mein nahi mili."; exit 1; fi
+          if [ -z "$P" ]; then echo "shared_app/pubspec.yaml nahi mili."; exit 1; fi
           ROOT=$(dirname "$(dirname "$P")")
           echo "Project root: $ROOT"
           echo "ROOT=$ROOT" >> "$GITHUB_ENV"
